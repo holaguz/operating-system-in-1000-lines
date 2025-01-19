@@ -27,9 +27,29 @@ const SbiRet = struct {
 };
 
 pub fn put_char(chr: u8) SbiRet {
-    return sbi_call(chr, 0, 0, 0, 0, 0, 0x00, 0x01);
+    return syscall_1(chr, 0x00, 0x01);
 }
 
+fn syscall_1(arg0: c_long, fid: c_long, eid: c_long) SbiRet {
+    var err: SbiError = undefined;
+    var value: c_long = undefined;
+
+    asm volatile ("ecall"
+        : [err] "={a0}" (err),
+          [value] "={a1}" (value),
+        : [arg0] "{a0}" (arg0),
+          [fid] "{a6}" (fid),
+          [eid] "{a7}" (eid),
+        : "memory"
+    );
+
+    return .{
+        .err = err,
+        .value = value,
+    };
+}
+
+/// Read the value of the CSR named `regname`
 fn sbi_call(
     arg0: c_long,
     arg1: c_long,
