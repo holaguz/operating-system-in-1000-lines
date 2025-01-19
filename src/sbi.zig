@@ -52,9 +52,7 @@ fn syscall_1(arg0: c_long, fid: c_long, eid: c_long) SbiRet {
 /// Read the value of the CSR named `regname`
 pub fn read_csr(comptime regname: []const u8) usize {
     var ret: u32 = undefined;
-    // csrrc csr, rd, rs
-    // ret <- csr, csr <- csr & ~rs
-    asm volatile ("csrrc a0, " ++ regname ++ ", x0"
+    asm volatile ("csrr a0, " ++ regname
         : [ret] "={a0}" (ret),
     );
     return ret;
