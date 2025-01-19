@@ -9,6 +9,9 @@ $(KERNEL): $(DEPS)
 	zig build --verbose --verbose-cc --verbose-link
 
 run: $(KERNEL)
+	$(QEMU) -machine virt -bios default -nographic -serial mon:stdio --no-reboot -kernel $(KERNEL)
+
+gdb: $(KERNEL)
 	$(QEMU) -machine virt -bios default -nographic -serial mon:stdio --no-reboot -kernel $(KERNEL) -s -S
 
 decomp: $(KERNEL)
