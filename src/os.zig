@@ -36,3 +36,7 @@ pub fn print(comptime fmt: []const u8, args: anytype) void {
 pub fn println(comptime fmt: []const u8, args: anytype) void {
     print(fmt ++ "\n", args);
 }
+
+pub fn time() u32 {
+    return sbi.read_csr("time");
+}
