@@ -22,7 +22,7 @@ pub fn build(b: *std.Build) void {
 
     var exe = b.addExecutable(.{
         .name = "kernel",
-        .root_source_file = b.path("src/entry.zig"),
+        .root_source_file = b.path("src/kernel.zig"),
         .target = target,
         .optimize = optimize,
     });

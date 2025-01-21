@@ -8,6 +8,7 @@ pub fn os_main() void {
     // @panic("Whoops!");
 
     while (true) {
-        asm volatile ("wfi");
+        os.println("Current time: {}", .{os.time()});
+        // asm volatile ("wfi");
     }
 }

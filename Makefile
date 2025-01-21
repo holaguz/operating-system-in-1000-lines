@@ -6,7 +6,7 @@ DEPS += build.zig
 
 
 $(KERNEL): $(DEPS)
-	zig build --verbose --verbose-cc --verbose-link
+	zig build --summary all --verbose --verbose-cc --verbose-link
 
 run: $(KERNEL)
 	$(QEMU) -machine virt -bios default -nographic -serial mon:stdio --no-reboot -kernel $(KERNEL)
