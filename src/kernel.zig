@@ -72,10 +72,13 @@ pub fn put_char(chr: u8) !void {
         error.SyscallError;
 }
 
-fn parse_dtb(dtb_address_: usize) void {
+fn parse_dtb(dtb_address_: usize) !MemoryInfo {
     // Ensure the given address contains a DT blob
     const dtb_magic = std.mem.readInt(u32, @ptrFromInt(dtb_address_), .big);
-    if (dtb_magic != 0xd00dfeed) os.println("DTB Header Magic not found", .{});
+    if (dtb_magic != 0xd00dfeed) {
+        os.println("DTB Header Magic not found", .{});
+        return error.DtbNotFound;
+    }
 
     // The full size of the DTB is specified on offset 4
     const dtb_size = std.mem.readInt(u32, @ptrFromInt(dtb_address_ + 4), .big);
@@ -90,17 +93,22 @@ fn parse_dtb(dtb_address_: usize) void {
     const alloc = fba.allocator();
 
     // Try to parse the DT blob
-    const dt = dtb.parse(alloc, dtb_slice) catch {
+    const dt = dtb.parse(alloc, dtb_slice) catch |err| {
         os.println("Failed parsing the DTB", .{});
-        return;
+        return err;
     };
 
-    const memory_node: ?*dtb.Node = for (dt.children) |node| {
+    const memory_node: *dtb.Node = for (dt.children) |node| {
         if (std.mem.startsWith(u8, node.name, "memory")) {
             break node;
         }
-    } else null;
+    } else return error.MemoryNodeNotFound;
 
     os.println("{any}", .{dt});
     os.println("Memory info: {any}", .{memory_node});
+
+    return .{
+        .base = 0,
+        .length = 0,
+    };
 }
