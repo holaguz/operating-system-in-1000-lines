@@ -4,31 +4,46 @@ const os = @import("os.zig");
 const cpu = @import("cpu.zig");
 const dtb = @import("dtb");
 
+// Declare linker symbols to be used in Zig functions.
 extern var __bss_start: usize;
 extern const __bss_size: usize;
 extern const __bss_end: usize;
 extern const __stack_top: usize;
 
+// Whether we should try to parse the DT blob to extract information about
+// the memory layout of the hardware. The extracted information is used to
+// relocate the stack pointer and heap.
+const DYNAMIC_MEMORY_CONFIG = true;
+
+const MemoryInfo = struct {
+    base: usize,
+    length: usize,
+};
+
 var ALREADY_PANICKING: bool = false;
 
-// This var is made global because the software crashes when declared on _start.
-var dtb_address: usize = undefined;
+export fn _start() linksection(".boot") callconv(.Naked) void {
+    // Preserve a0 and a1 because if we're booting from OpenSBI
+    // they hold valuable information.
+    asm volatile (
+        \\ lui a2, %hi(__stack_top)         // a2 = initial sp
+        \\ addi a2, a2, %lo(__stack_top)
+        \\ mv sp, a2                        // set the stack pointer
+        \\
+        \\ lui a3, %hi(kernel_main)         // a3 = kernel entry point
+        \\ addi a3, a3, %lo(kernel_main)
+        \\ jr a3                            // jump to the kernel main
+        ::: "memory");
+}
 
-export fn _start() linksection(".boot") void {
-    // Setup the Stack Pointer
-    asm volatile ("mv sp, %[initial_sp]"
-        :
-        : [initial_sp] "r" (&__stack_top),
-        : "sp", "memory"
-    );
-
+export fn kernel_main(hartid: usize, dtb_address: usize) void {
     // OpenSBI provides the following:
     // a0: hartid
     // a1: device-tree blob address
-    // See: https://github.com/riscv-software-src/opensbi/blob/master/docs/firmware/fw.md
-    asm volatile ("mv %[dtb], a1"
-        : [dtb] "={a2}" (dtb_address),
-    );
+    // These arguments might not hold true on platforms not running OpenSBI!
+
+    _ = hartid;
+    _ = dtb_address;
 
     // Install the Exception Handler
     cpu.write_csr("stvec", @intFromPtr(&os.kernel_entry));
@@ -37,15 +52,7 @@ export fn _start() linksection(".boot") void {
     const bss_size = @intFromPtr(&__bss_size);
     const bss: [*]volatile u8 = @ptrCast(&__bss_start);
     for (0..bss_size) |b| bss[b] = 0;
-
-    // Try to parse the device-tree blob. Some systems don't provide the DTB, so this
-    // step is optional.
-    parse_dtb(dtb_address);
-
-    asm volatile ("jr %[main]"
-        :
-        : [main] "r" (@intFromPtr(&main.os_main)),
-    );
+    main.os_main();
 }
 
 pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, _: ?usize) noreturn {
