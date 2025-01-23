@@ -1,6 +1,7 @@
 const std = @import("std");
 const cpu = @import("cpu.zig");
 const kernel = @import("kernel.zig");
+const dtb = @import("dtb");
 
 /// Implementation of the GenericWriter interface.
 const ConsoleWriter = std.io.Writer(
