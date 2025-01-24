@@ -5,10 +5,11 @@ const cpu = @import("cpu.zig");
 const dtb = @import("dtb");
 
 // Declare linker symbols to be used in Zig functions.
-extern var __bss_start: usize;
+extern const __bss_start: usize;
 extern const __bss_size: usize;
 extern const __bss_end: usize;
 extern const __stack_top: usize;
+extern const HEAP_PAGE_ALIGNMENT: usize;
 
 /// Whether we should try to parse the DT blob to extract information about
 /// the memory layout of the hardware. The extracted information is used to
@@ -57,6 +58,7 @@ const TrapFrame = struct {
 };
 
 var ALREADY_PANICKING: bool = false;
+var HEAP_START: *void = undefined;
 
 /// The entry point of our program.
 export fn _start() linksection(".boot") callconv(.Naked) void {
@@ -80,16 +82,51 @@ export fn kernel_main(hartid: usize, dtb_address: usize) void {
     // These arguments might not hold true on platforms not running OpenSBI!
 
     _ = hartid;
-    _ = dtb_address;
 
     // Install the Exception Handler
     cpu.write_csr("stvec", @intFromPtr(&call_trap_handler));
 
     // Clear the BSS section
     const bss_size = @intFromPtr(&__bss_size);
-    const bss: [*]volatile u8 = @ptrCast(&__bss_start);
+    const bss: [*]volatile u8 = @constCast(@ptrCast(&__bss_start));
     for (0..bss_size) |b| bss[b] = 0;
-    main.os_main();
+
+    if (DYNAMIC_MEMORY_CONFIG) blk: {
+        const memory_info = parse_dtb(dtb_address) catch |err| {
+            os.println("Couldn't parse DTB info: {}", .{err});
+            break :blk;
+        };
+
+        relocate_heap_sp_and_call_os(memory_info);
+    } else {
+        main.os_main();
+    }
+
+    unreachable;
+}
+
+fn relocate_heap_sp_and_call_os(mem: MemoryInfo) void {
+
+    // bss_end is the last memory address used by our program.
+    const bss_end: usize = @intFromPtr(&__bss_end);
+    const heap_page_alignment: usize = @intFromPtr(&HEAP_PAGE_ALIGNMENT);
+
+    // The start address of the heap, up-aligned to the user provided page boundary.
+    const heap_start = std.mem.alignForward(usize, bss_end, heap_page_alignment);
+    HEAP_START = @ptrFromInt(heap_start);
+
+    // The end of the RAM memory. The new stack pointer will be set here.
+    const ram_end = mem.base + mem.length;
+
+    // Setup the new stack pointer and jump to the OS entry point
+    asm volatile (
+        \\ mv sp, %[new_sp]
+        \\ jr %[os_main]
+        :
+        : [new_sp] "r" (ram_end),
+          [os_main] "r" (&main.os_main),
+        : "sp", "memory"
+    );
 }
 
 pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, _: ?usize) noreturn {
@@ -141,12 +178,16 @@ fn parse_dtb(dtb_address_: usize) !MemoryInfo {
         }
     } else return error.MemoryNodeNotFound;
 
+    const reg = memory_node.prop(.Reg).?[0];
+    const base = reg[0];
+    const length = reg[1];
+
     os.println("{any}", .{dt});
     os.println("Memory info: {any}", .{memory_node});
 
     return .{
-        .base = 0,
-        .length = 0,
+        .base = @intCast(base),
+        .length = @intCast(length),
     };
 }
 

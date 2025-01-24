@@ -1,5 +1,7 @@
 ENTRY(_start)
 
+HEAP_PAGE_ALIGNMENT = 1024;
+
 SECTIONS {
     . = 0x80200000;
 
