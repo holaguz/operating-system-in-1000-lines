@@ -98,10 +98,9 @@ export fn kernel_main(hartid: usize, dtb_address: usize) void {
         };
 
         relocate_heap_sp_and_call_os(memory_info);
-    } else {
-        main.os_main();
+        unreachable;
     }
-
+    main.os_main();
     unreachable;
 }
 
