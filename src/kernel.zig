@@ -9,6 +9,8 @@ extern const __bss_start: usize;
 extern const __bss_size: usize;
 extern const __bss_end: usize;
 extern const __stack_top: usize;
+extern const __free_ram: usize;
+extern const __free_ram_end: usize;
 extern const HEAP_PAGE_ALIGNMENT: usize;
 
 /// Whether we should try to parse the DT blob to extract information about
@@ -58,7 +60,8 @@ const TrapFrame = struct {
 };
 
 var ALREADY_PANICKING: bool = false;
-var HEAP_START: *void = undefined;
+var HEAP_START: usize = undefined;
+var HEAP_CURRENT: usize = undefined;
 
 /// The entry point of our program.
 export fn _start() linksection(".boot") callconv(.Naked) void {
@@ -91,6 +94,9 @@ export fn kernel_main(hartid: usize, dtb_address: usize) void {
     const bss: [*]volatile u8 = @constCast(@ptrCast(&__bss_start));
     for (0..bss_size) |b| bss[b] = 0;
 
+    // Set the HEAP_START to the value pointer by the linker
+    HEAP_START = @intFromPtr(&__free_ram);
+
     if (DYNAMIC_MEMORY_CONFIG) blk: {
         const memory_info = parse_dtb(dtb_address) catch |err| {
             os.println("Couldn't parse DTB info: {}", .{err});
@@ -112,7 +118,7 @@ fn relocate_heap_sp_and_call_os(mem: MemoryInfo) void {
 
     // The start address of the heap, up-aligned to the user provided page boundary.
     const heap_start = std.mem.alignForward(usize, bss_end, heap_page_alignment);
-    HEAP_START = @ptrFromInt(heap_start);
+    HEAP_START = heap_start;
 
     // The end of the RAM memory. The new stack pointer will be set here.
     const ram_end = mem.base + mem.length;
