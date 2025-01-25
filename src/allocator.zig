@@ -63,14 +63,6 @@ pub const BuddyAllocator = struct {
         @memset(sum_tree, 0);
         @memset(used, 0);
 
-        std.debug.print("{?}\n", .{.{
-            size,
-            page_size,
-            num_pages,
-            sum_tree,
-            used,
-        }});
-
         var self = BuddyAllocator{
             .size = size,
             .page_size = page_size,
@@ -181,6 +173,28 @@ pub const BuddyAllocator = struct {
             i % 8,
         };
     }
+
+    pub fn graphviz(self: *const BuddyAllocator) void {
+        // Header
+        std.debug.print("digraph BuddyAllocator {{\n", .{});
+
+        for (self.sum_tree, 0..) |el, i| {
+            std.debug.print("\t{} [label=\"ix={} cnt={}\"];\n", .{ i, i, el });
+            std.debug.print("\t{} -> {};\n", .{ i, 2 * i + 1 });
+            std.debug.print("\t{} -> {};\n", .{ i, 2 * i + 2 });
+        }
+        std.debug.print("\n", .{});
+
+        for (0..self.num_pages) |i| {
+            const pix = self.pageIndexToTreeIndex(i);
+            const bucket, const bit = pageIndexToBucketAndPos(i);
+            const mask = std.math.shl(u8, 1, bit);
+            const value: usize = if (self.used[bucket] & mask > 0) 1 else 0;
+            std.debug.print("\t{} [label=\"pi={}, v={}\"];\n", .{ pix, i, value });
+        }
+
+        std.debug.print("}}\n", .{});
+    }
 };
 
 test "BuddyAllocator init" {
@@ -196,7 +210,7 @@ test "BuddyAllocator init" {
 
     // const base = @intFromPtr(&buffer);
     const b = BuddyAllocator.init(&buffer, heap_size, page_size);
-    _ = b;
+    b.graphviz();
     // try std.testing.expectEqual(1, meta[0]);
 
     // std.debug.print("{}, {any}", .{ b, buffer });
