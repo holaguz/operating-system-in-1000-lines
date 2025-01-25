@@ -156,14 +156,14 @@ pub const BuddyAllocator = struct {
         }
     }
 
-    inline fn pageIndexToTreeIndex(self: *BuddyAllocator, i: usize) usize {
+    inline fn pageIndexToTreeIndex(self: *const BuddyAllocator, i: usize) usize {
         if (i >= self.num_pages) {
             @panic("Invalid page index");
         }
         return i + self.num_pages - 1;
     }
 
-    inline fn treeIndexToPageIndex(self: *BuddyAllocator, i: usize) usize {
+    inline fn treeIndexToPageIndex(self: *const BuddyAllocator, i: usize) usize {
         if (i < self.num_pages - 1) {
             @panic("Index is not a page index");
         }
@@ -171,7 +171,7 @@ pub const BuddyAllocator = struct {
         return i - (self.num_pages - 1);
     }
 
-    inline fn indexIsPage(self: *BuddyAllocator, i: usize) bool {
+    inline fn indexIsPage(self: *const BuddyAllocator, i: usize) bool {
         return i >= self.num_pages - 1;
     }
 
