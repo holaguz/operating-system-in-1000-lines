@@ -77,7 +77,7 @@ pub const BuddyAllocator = struct {
             .num_pages = num_pages,
             .used = used,
             .sum_tree = sum_tree,
-            .memory = buffer,
+            .memory = buffer[0..size],
         };
 
         for (0..pages_needed) |i| {
