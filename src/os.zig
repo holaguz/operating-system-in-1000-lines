@@ -1,7 +1,11 @@
 const std = @import("std");
 const cpu = @import("cpu.zig");
 const kernel = @import("kernel.zig");
-const dtb = @import("dtb");
+// const dtb = @import("dtb");
+
+pub fn OsAllocator() std.mem.Allocator {
+    return kernel.KernelAlloc.allocator();
+}
 
 /// Implementation of the GenericWriter interface.
 const ConsoleWriter = std.io.Writer(

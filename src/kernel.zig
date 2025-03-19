@@ -2,21 +2,21 @@ const std = @import("std");
 const main = @import("main.zig");
 const os = @import("os.zig");
 const cpu = @import("cpu.zig");
-const dtb = @import("dtb");
+// const dtb = @import("dtb");
+const Allocator = std.mem.Allocator;
 
 // Declare linker symbols to be used in Zig functions.
 extern const __bss_start: usize;
 extern const __bss_size: usize;
 extern const __bss_end: usize;
 extern const __stack_top: usize;
-extern const __free_ram: usize;
-extern const __free_ram_end: usize;
+extern const __end: usize;
 extern const HEAP_PAGE_ALIGNMENT: usize;
 
 /// Whether we should try to parse the DT blob to extract information about
 /// the memory layout of the hardware. The extracted information is used to
 /// relocate the stack pointer and heap.
-const DYNAMIC_MEMORY_CONFIG = true;
+const DYNAMIC_MEMORY_CONFIG = false;
 
 const MemoryInfo = struct {
     base: usize,
@@ -60,8 +60,10 @@ const TrapFrame = struct {
 };
 
 var ALREADY_PANICKING: bool = false;
-var HEAP_START: usize = undefined;
+var HEAP_START: usize = @intFromPtr(&__end);
 var HEAP_CURRENT: usize = undefined;
+
+pub var KernelAlloc: std.heap.FixedBufferAllocator = undefined;
 
 /// The entry point of our program.
 export fn _start() linksection(".boot") callconv(.Naked) void {
@@ -85,6 +87,7 @@ export fn kernel_main(hartid: usize, dtb_address: usize) void {
     // These arguments might not hold true on platforms not running OpenSBI!
 
     _ = hartid;
+    _ = dtb_address;
 
     // Install the Exception Handler
     cpu.write_csr("stvec", @intFromPtr(&call_trap_handler));
@@ -94,18 +97,21 @@ export fn kernel_main(hartid: usize, dtb_address: usize) void {
     const bss: [*]volatile u8 = @constCast(@ptrCast(&__bss_start));
     for (0..bss_size) |b| bss[b] = 0;
 
-    // Set the HEAP_START to the value pointer by the linker
-    HEAP_START = @intFromPtr(&__free_ram);
+    // if (DYNAMIC_MEMORY_CONFIG) blk: {
+    //     const memory_info = parse_dtb(dtb_address) catch |err| {
+    //         os.println("Couldn't parse DTB info: {}", .{err});
+    //         break :blk;
+    //     };
+    // }
 
-    if (DYNAMIC_MEMORY_CONFIG) blk: {
-        const memory_info = parse_dtb(dtb_address) catch |err| {
-            os.println("Couldn't parse DTB info: {}", .{err});
-            break :blk;
-        };
+    const buffer_size = 4 * 1024 * 1024;
 
-        relocate_heap_sp_and_call_os(memory_info);
-        unreachable;
-    }
+    const heap_slice = blk: {
+        const many_ptr: [*]u8 = @constCast(@ptrCast(&__end));
+        break :blk many_ptr[0..buffer_size];
+    };
+
+    KernelAlloc = std.heap.FixedBufferAllocator.init(heap_slice);
     main.os_main();
     unreachable;
 }
@@ -151,50 +157,50 @@ pub fn put_char(chr: u8) !void {
         error.SyscallError;
 }
 
-fn parse_dtb(dtb_address_: usize) !MemoryInfo {
-    // Ensure the given address contains a DT blob
-    const dtb_magic = std.mem.readInt(u32, @ptrFromInt(dtb_address_), .big);
-    if (dtb_magic != 0xd00dfeed) {
-        os.println("DTB Header Magic not found", .{});
-        return error.DtbNotFound;
-    }
-
-    // The full size of the DTB is specified on offset 4
-    const dtb_size = std.mem.readInt(u32, @ptrFromInt(dtb_address_ + 4), .big);
-    os.println("Found DTB with size {}", .{dtb_size});
-
-    // Create a proper slice using the address and known size
-    const dtb_slice: []const u8 = @as([*]const u8, @ptrFromInt(dtb_address_))[0..dtb_size];
-
-    // Allocate memory on the stack to store the DT
-    var alloc_base: [1024 * 16]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&alloc_base);
-    const alloc = fba.allocator();
-
-    // Try to parse the DT blob
-    const dt = dtb.parse(alloc, dtb_slice) catch |err| {
-        os.println("Failed parsing the DTB", .{});
-        return err;
-    };
-
-    const memory_node: *dtb.Node = for (dt.children) |node| {
-        if (std.mem.startsWith(u8, node.name, "memory")) {
-            break node;
-        }
-    } else return error.MemoryNodeNotFound;
-
-    const reg = memory_node.prop(.Reg).?[0];
-    const base = reg[0];
-    const length = reg[1];
-
-    os.println("{any}", .{dt});
-    os.println("Memory info: {any}", .{memory_node});
-
-    return .{
-        .base = @intCast(base),
-        .length = @intCast(length),
-    };
-}
+// fn parse_dtb(dtb_address_: usize) !MemoryInfo {
+//     // Ensure the given address contains a DT blob
+//     const dtb_magic = std.mem.readInt(u32, @ptrFromInt(dtb_address_), .big);
+//     if (dtb_magic != 0xd00dfeed) {
+//         os.println("DTB Header Magic not found", .{});
+//         return error.DtbNotFound;
+//     }
+//
+//     // The full size of the DTB is specified on offset 4
+//     const dtb_size = std.mem.readInt(u32, @ptrFromInt(dtb_address_ + 4), .big);
+//     os.println("Found DTB with size {}", .{dtb_size});
+//
+//     // Create a proper slice using the address and known size
+//     const dtb_slice: []const u8 = @as([*]const u8, @ptrFromInt(dtb_address_))[0..dtb_size];
+//
+//     // Allocate memory on the stack to store the DT
+//     var alloc_base: [1024 * 16]u8 = undefined;
+//     var fba = std.heap.FixedBufferAllocator.init(&alloc_base);
+//     const alloc = fba.allocator();
+//
+//     // Try to parse the DT blob
+//     const dt = dtb.parse(alloc, dtb_slice) catch |err| {
+//         os.println("Failed parsing the DTB", .{});
+//         return err;
+//     };
+//
+//     const memory_node: *dtb.Node = for (dt.children) |node| {
+//         if (std.mem.startsWith(u8, node.name, "memory")) {
+//             break node;
+//         }
+//     } else return error.MemoryNodeNotFound;
+//
+//     const reg = memory_node.prop(.Reg).?[0];
+//     const base = reg[0];
+//     const length = reg[1];
+//
+//     os.println("{any}", .{dt});
+//     os.println("Memory info: {any}", .{memory_node});
+//
+//     return .{
+//         .base = @intCast(base),
+//         .length = @intCast(length),
+//     };
+// }
 
 fn call_trap_handler() align(4) callconv(.Naked) void {
     asm volatile (
