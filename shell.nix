@@ -1,13 +1,9 @@
 { pkgs ? import <nixpkgs> { } }:
 
-let unstable = import <unstable> {};
+let unstable = import <unstable> { };
 
 in pkgs.mkShell {
-  buildInputs = with pkgs; [
-    unstable.zig
-    llvm
-    qemu
-  ];
+  buildInputs = with pkgs; [ llvm qemu ] ++ (with unstable; [ zig zls ]);
 
   shellHook = ''
     echo "Zig Development Environment"
