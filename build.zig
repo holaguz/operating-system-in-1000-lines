@@ -32,11 +32,18 @@ pub fn build(b: *std.Build) void {
     exe.setVerboseCC(true);
     exe.setVerboseLink(true);
 
-    const dtb = b.dependency("dtb.zig", .{ .target = target, .optimize = optimize });
-    const dtb_mod = dtb.module("dtb");
-    exe.root_module.addImport("dtb", dtb_mod);
+    // const dtb = b.dependency("dtb.zig", .{ .target = target, .optimize = optimize });
+    // const dtb_mod = dtb.module("dtb");
+    // exe.root_module.addImport("dtb", dtb_mod);
 
     b.installArtifact(exe);
+
+    const no_bin = b.option(bool, "no-bin", "skip emitting binary") orelse false;
+    if (no_bin) {
+        b.getInstallStep().dependOn(&exe.step);
+    } else {
+        b.installArtifact(exe);
+    }
 
     const run_cmd = b.addRunArtifact(exe);
 
