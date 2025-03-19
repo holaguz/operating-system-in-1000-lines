@@ -25,6 +25,8 @@ SECTIONS {
     }
 
     __bss_size = SIZEOF(.bss);
+    . = ALIGN(8);
+    __end = .;
 
     . = ALIGN(64);
     . += 128 * 1024; /* 128KB */
